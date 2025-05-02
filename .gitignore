@@ -49,9 +49,10 @@ ehthumbs.db
 Thumbs.db
 
 # Streamlit specific
-.streamlit/
-
+.streamlit/secrets.toml
+.streamlit/secrets*.toml
+.streamlit/config.toml
 # Database files (if you want to exclude them)
-# *.db  # Uncomment if you don't want to track DB files
+# *.db  # We want to include the database for Streamlit Cloud
 # *.sqlite
 # *.sqlite3

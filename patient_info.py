@@ -7,11 +7,16 @@ import json
 import time
 from datetime import datetime
 
-# Load environment variables
+# Load environment variables for local development
 load_dotenv()
 
-# Database connection
-DB_PATH = os.getenv('DATABASE_PATH', '/home/yasir/Downloads/codes/muawin_MVP/muawin.db')
+# Database connection - prioritize Streamlit secrets for cloud deployment
+try:
+    # Try to get DB path from Streamlit secrets (for cloud deployment)
+    DB_PATH = st.secrets.get("DATABASE_PATH", "muawin.db")
+except (AttributeError, FileNotFoundError):
+    # Fall back to environment variables or local path (for local development)
+    DB_PATH = os.getenv('DATABASE_PATH', 'muawin.db')
 
 def get_db_connection():
     conn = sqlite3.connect(DB_PATH)
