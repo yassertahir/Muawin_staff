@@ -345,6 +345,7 @@ with tab2:
             
             # Extract medication names based on prescription format
             medications = []
+            prescribed_quantities = {}
             
             if isinstance(latest_prescription['prescription'], list):
                 # Handle list format
@@ -378,7 +379,54 @@ with tab2:
                     # Extract medication name (first part before any ' - ')
                     parts = line.split(' - ')
                     if parts:
-                        medications.append(parts[0].strip())
+                        medication_name = parts[0].strip()
+                        medications.append(medication_name)
+                        
+                        # Try to parse quantity from dosage information (e.g., "500mg" -> 500)
+                        if len(parts) >= 2:
+                            dosage_part = parts[1].strip()
+                            import re
+                            # Extract numbers from dosage (e.g. "500mg" -> 500)
+                            dosage_numbers = re.findall(r'\d+', dosage_part)
+                            if dosage_numbers:
+                                try:
+                                    dosage_num = int(dosage_numbers[0])
+                                    # Extract frequency information
+                                    if len(parts) >= 3:
+                                        frequency_part = parts[2].lower()
+                                        # Calculate units needed based on frequency phrases
+                                        units = 1
+                                        if "three times" in frequency_part or "3 times" in frequency_part:
+                                            units = 3
+                                        elif "twice" in frequency_part or "two times" in frequency_part or "2 times" in frequency_part:
+                                            units = 2
+                                        
+                                        # Extract duration information
+                                        duration_days = 7  # Default to a week
+                                        if len(parts) >= 4:
+                                            duration_part = parts[3].lower()
+                                            duration_numbers = re.findall(r'\d+', duration_part)
+                                            if duration_numbers and "day" in duration_part:
+                                                try:
+                                                    duration_days = int(duration_numbers[0])
+                                                except ValueError:
+                                                    pass
+                                            elif "week" in duration_part and duration_numbers:
+                                                try:
+                                                    duration_days = int(duration_numbers[0]) * 7
+                                                except ValueError:
+                                                    pass
+                                        
+                                        # Calculate total quantity needed
+                                        prescribed_quantities[medication_name] = units * duration_days
+                                    else:
+                                        prescribed_quantities[medication_name] = 7  # Default to a week's supply
+                                except ValueError:
+                                    prescribed_quantities[medication_name] = 5  # Default quantity if parsing fails
+                            else:
+                                prescribed_quantities[medication_name] = 5  # Default quantity
+                        else:
+                            prescribed_quantities[medication_name] = 5  # Default quantity
             
             # Generate inventory status for each medication
             import random
@@ -387,11 +435,14 @@ with tab2:
             if medications:
                 for med in medications:
                     if med:  # Skip empty medication names
-                        quantity = random.randint(0, 30)  # Simulate inventory quantity
-                        status = "In Stock" if quantity > 5 else "Low Stock" if quantity > 0 else "Out of Stock"
+                        available_quantity = random.randint(0, 30)  # Simulate inventory quantity
+                        required_quantity = prescribed_quantities.get(med, 5)  # Get required quantity or default to 5
+                        status = "In Stock" if available_quantity >= required_quantity else "Low Stock" if available_quantity > 0 else "Out of Stock"
+                        
                         inventory_data.append({
                             "Medication": med,
-                            "Quantity": quantity,
+                            "Available Quantity": available_quantity,
+                            "Required Quantity": required_quantity,
                             "Status": status
                         })
                 
