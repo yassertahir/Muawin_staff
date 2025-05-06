@@ -31,6 +31,115 @@ COMMON_CONDITIONS = [
             "Allergies", "Epilepsy"
 ]
 
+# Function to get latest prescription for a patient
+def get_latest_prescription(patient_id):
+    conn = get_db_connection()
+    query = """
+        SELECT prescription, consultation_date, diagnosis 
+        FROM consultations 
+        WHERE patient_id = ? 
+        ORDER BY consultation_date DESC 
+        LIMIT 1
+    """
+    result = conn.execute(query, (patient_id,)).fetchone()
+    conn.close()
+    
+    if result:
+        # Parse prescription from JSON if it's stored as JSON, otherwise return as is
+        try:
+            prescription = json.loads(result['prescription'])
+        except (json.JSONDecodeError, TypeError):
+            # If not valid JSON, return the raw prescription text
+            prescription = result['prescription']
+        
+        return {
+            'prescription': prescription,
+            'date': result['consultation_date'],
+            'diagnosis': result['diagnosis']
+        }
+    
+    return None
+
+# Function to format prescription data into a displayable table
+def format_prescription_table(prescription_data):
+    if isinstance(prescription_data, list):
+        # Handle prescription in list format
+        formatted_data = []
+        for item in prescription_data:
+            if isinstance(item, dict):
+                formatted_data.append(item)
+            else:
+                formatted_data.append({"Medication": item})
+        
+        return pd.DataFrame(formatted_data)
+    
+    elif isinstance(prescription_data, dict):
+        # Handle prescription in dictionary format
+        formatted_data = []
+        for medication, details in prescription_data.items():
+            if isinstance(details, dict):
+                entry = {"Medication": medication, **details}
+            else:
+                entry = {"Medication": medication, "Instructions": details}
+            formatted_data.append(entry)
+        
+        return pd.DataFrame(formatted_data)
+    
+    else:
+        # Handle text-based prescription format with bullet points
+        if isinstance(prescription_data, str):
+            # Split the prescription into lines
+            lines = prescription_data.strip().split('\n')
+            
+            # Remove the "PRESCRIPTION:" header if present
+            if lines and "PRESCRIPTION:" in lines[0]:
+                lines = lines[2:]  # Skip header and blank line
+                
+            formatted_data = []
+            
+            for line in lines:
+                line = line.strip()
+                if not line or line == "":
+                    continue
+                    
+                # Remove bullet point if present
+                if line.startswith('•') or line.startswith('* ') or line.startswith('- '):
+                    line = line[2:].strip()
+                elif line.startswith('1.') or line.startswith('2.'):  # Handle numbered lists
+                    line = line[line.find('.')+1:].strip()
+                    
+                # Parse the components based on the typical format
+                # Medication - Dosage - Frequency - Duration (Side effects: list of side effects)
+                parts = line.split(' - ')
+                med_data = {}
+                
+                if len(parts) >= 1:
+                    med_data["Medication"] = parts[0].strip()
+                
+                if len(parts) >= 2:
+                    med_data["Dosage"] = parts[1].strip()
+                    
+                if len(parts) >= 3:
+                    med_data["Frequency"] = parts[2].strip()
+                    
+                if len(parts) >= 4:
+                    # Handle side effects that are in parentheses 
+                    duration_parts = parts[3].split('(Side effects:', 1)
+                    med_data["Duration"] = duration_parts[0].strip()
+                    
+                    if len(duration_parts) > 1:
+                        side_effects = duration_parts[1].strip()
+                        if side_effects.endswith(')'):
+                            side_effects = side_effects[:-1]
+                        med_data["Side Effects"] = side_effects
+                
+                formatted_data.append(med_data)
+            
+            return pd.DataFrame(formatted_data) if formatted_data else pd.DataFrame({"Medication": ["No medications found"]})
+        
+        # Fallback for other formats
+        return pd.DataFrame({"Prescription": [prescription_data]})
+
 def load_patient_data(patient_id):
     conn = get_db_connection()
     query = "SELECT * FROM patients WHERE id = ?"
@@ -119,31 +228,31 @@ with col1:
 with col2:
     st.title("Patient Information")
 
-# Create tabs for patient info and requests
-tab1, tab2 = st.tabs(["Patient Information", "Requests Monitor"])
+# Create tabs for patient info, medication, and requests
+tab1, tab2, tab3 = st.tabs(["Patient Information", "Patient Medication", "Requests Monitor"])
+
+# Patient ID input (outside tabs, so it's shared between Patient Info and Medication tabs)
+col1, col2 = st.columns([3, 1])
+with col1:
+    patient_id = st.text_input("Enter Patient ID (e.g., P001):")
+with col2:
+    if st.button("Load Patient Data"):
+        if patient_id:
+            st.session_state.current_patient = load_patient_data(patient_id)
+            if not st.session_state.current_patient:
+                st.warning(f"Patient with ID {patient_id} not found. Creating new record.")
+                st.session_state.current_patient = {
+                    'id': patient_id,
+                    'name': '',
+                    'age': 0,
+                    'gender': '',
+                    'pre_conditions': '[]',
+                    'language': 'English'
+                }
+        else:
+            st.error("Please enter a Patient ID")
 
 with tab1:
-    # Patient ID input
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        patient_id = st.text_input("Enter Patient ID (e.g., P001):")
-    with col2:
-        if st.button("Load Patient Data"):
-            if patient_id:
-                st.session_state.current_patient = load_patient_data(patient_id)
-                if not st.session_state.current_patient:
-                    st.warning(f"Patient with ID {patient_id} not found. Creating new record.")
-                    st.session_state.current_patient = {
-                        'id': patient_id,
-                        'name': '',
-                        'age': 0,
-                        'gender': '',
-                        'pre_conditions': '[]',
-                        'language': 'English'
-                    }
-            else:
-                st.error("Please enter a Patient ID")
-
     # Main form
     if 'current_patient' in st.session_state:
         patient = st.session_state.current_patient
@@ -215,6 +324,96 @@ with tab1:
                     st.error("Error saving patient information!")
 
 with tab2:
+    if 'current_patient' in st.session_state:
+        patient = st.session_state.current_patient
+        
+        # Get and display latest prescription for this patient
+        latest_prescription = get_latest_prescription(patient['id'])
+        if latest_prescription:
+            st.subheader("Latest Prescription")
+            
+            # Show diagnosis and date
+            st.write(f"**Date:** {latest_prescription['date']}")
+            st.write(f"**Diagnosis:** {latest_prescription['diagnosis'] or 'Not specified'}")
+            
+            # Format prescription as a table based on its structure
+            prescription_df = format_prescription_table(latest_prescription['prescription'])
+            st.table(prescription_df)
+            
+            # Display inventory simulation section
+            st.subheader("Inventory Status")
+            
+            # Extract medication names based on prescription format
+            medications = []
+            
+            if isinstance(latest_prescription['prescription'], list):
+                # Handle list format
+                for item in latest_prescription['prescription']:
+                    if isinstance(item, dict) and 'Medication' in item:
+                        medications.append(item['Medication'])
+                    elif isinstance(item, str):
+                        medications.append(item)
+            elif isinstance(latest_prescription['prescription'], dict):
+                # Handle dictionary format
+                medications = list(latest_prescription['prescription'].keys())
+            elif isinstance(latest_prescription['prescription'], str):
+                # Handle text format - extract medication names from the first part of each line
+                lines = latest_prescription['prescription'].strip().split('\n')
+                
+                # Skip "PRESCRIPTION:" header if present
+                if lines and "PRESCRIPTION:" in lines[0]:
+                    lines = lines[2:]  # Skip header and blank line
+                
+                for line in lines:
+                    line = line.strip()
+                    if not line:
+                        continue
+                        
+                    # Remove bullet point or numbering if present
+                    if line.startswith('•') or line.startswith('* ') or line.startswith('- '):
+                        line = line[2:].strip()
+                    elif line[0].isdigit() and line[1:3] in ['. ', ') ']:
+                        line = line[3:].strip()
+                        
+                    # Extract medication name (first part before any ' - ')
+                    parts = line.split(' - ')
+                    if parts:
+                        medications.append(parts[0].strip())
+            
+            # Generate inventory status for each medication
+            import random
+            inventory_data = []
+            
+            if medications:
+                for med in medications:
+                    if med:  # Skip empty medication names
+                        quantity = random.randint(0, 30)  # Simulate inventory quantity
+                        status = "In Stock" if quantity > 5 else "Low Stock" if quantity > 0 else "Out of Stock"
+                        inventory_data.append({
+                            "Medication": med,
+                            "Quantity": quantity,
+                            "Status": status
+                        })
+                
+                # Display inventory table
+                if inventory_data:
+                    inventory_df = pd.DataFrame(inventory_data)
+                    st.table(inventory_df)
+                    
+                    # Alert for low stock items
+                    low_stock = [item for item in inventory_data if item['Status'] != "In Stock"]
+                    if low_stock:
+                        st.warning(f"Warning: {len(low_stock)} medication(s) need to be restocked!")
+                else:
+                    st.info("No inventory data available.")
+            else:
+                st.info("No medications found to check inventory status.")
+        else:
+            st.info("No prescription records found for this patient.")
+    else:
+        st.info("Please select a patient first by entering a Patient ID above.")
+
+with tab3:
     st.subheader("Patient Requests Monitor")
     
     # Auto-refresh mechanism
