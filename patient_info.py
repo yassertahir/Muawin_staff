@@ -31,6 +31,13 @@ COMMON_CONDITIONS = [
             "Allergies", "Epilepsy"
 ]
 
+# Common symptoms for checkboxes
+COMMON_SYMPTOMS = [
+    "Fever", "Headache", "Cough", "Sore Throat", "Fatigue", "Nausea",
+    "Vomiting", "Diarrhea", "Abdominal Pain", "Chest Pain", "Shortness of Breath",
+    "Dizziness", "Rash", "Joint Pain", "Back Pain", "Sweating", "Chills"
+]
+
 # Function to get latest prescription for a patient
 def get_latest_prescription(patient_id):
     conn = get_db_connection()
@@ -161,7 +168,9 @@ def save_patient_data(patient_data):
         # Update existing patient
         cursor.execute("""
             UPDATE patients 
-            SET name = ?, age = ?, gender = ?, pre_conditions = ?, language = ?
+            SET name = ?, age = ?, gender = ?, pre_conditions = ?, language = ?,
+                temperature = ?, blood_pressure = ?, heart_rate = ?, 
+                respiratory_rate = ?, oxygen_saturation = ?, symptoms = ?
             WHERE id = ?
         """, (
             patient_data['name'], 
@@ -169,20 +178,36 @@ def save_patient_data(patient_data):
             patient_data['gender'],
             patient_data['pre_conditions'],
             patient_data['language'],
+            patient_data.get('temperature', ''),
+            patient_data.get('blood_pressure', ''),
+            patient_data.get('heart_rate', ''),
+            patient_data.get('respiratory_rate', ''),
+            patient_data.get('oxygen_saturation', ''),
+            patient_data.get('symptoms', ''),
             patient_data['id']
         ))
     else:
         # Insert new patient
         cursor.execute("""
-            INSERT INTO patients (id, name, age, gender, pre_conditions, language)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO patients (
+                id, name, age, gender, pre_conditions, language,
+                temperature, blood_pressure, heart_rate, 
+                respiratory_rate, oxygen_saturation, symptoms
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             patient_data['id'], 
             patient_data['name'], 
             patient_data['age'], 
             patient_data['gender'],
             patient_data['pre_conditions'],
-            patient_data['language']
+            patient_data['language'],
+            patient_data.get('temperature', ''),
+            patient_data.get('blood_pressure', ''),
+            patient_data.get('heart_rate', ''),
+            patient_data.get('respiratory_rate', ''),
+            patient_data.get('oxygen_saturation', ''),
+            patient_data.get('symptoms', '')
         ))
     
     conn.commit()
@@ -272,6 +297,49 @@ with tab1:
                 language = st.selectbox("Preferred Language", ["English", "Urdu", "Punjabi", "Other"], 
                                       index=["English", "Urdu", "Punjabi", "Other"].index(patient.get('language', 'English')) if patient.get('language') in ["English", "Urdu", "Punjabi", "Other"] else 0)
             
+            # Vitals section
+            st.subheader("Vital Signs")
+            vital_cols = st.columns(3)
+            
+            with vital_cols[0]:
+                temperature = st.text_input("Temperature (°F)", value="", placeholder="e.g., 98.6")
+                heart_rate = st.text_input("Heart Rate (bpm)", value="", placeholder="e.g., 75")
+                
+            with vital_cols[1]:
+                blood_pressure = st.text_input("Blood Pressure (mmHg)", value="", placeholder="e.g., 120/80")
+                respiratory_rate = st.text_input("Respiratory Rate (breaths/min)", value="", placeholder="e.g., 16")
+                
+            with vital_cols[2]:
+                oxygen_saturation = st.text_input("Oxygen Saturation (%)", value="", placeholder="e.g., 98")
+            
+            # Symptoms section
+            st.subheader("Symptoms")
+            
+            # Parse existing symptoms from JSON string or initialize empty list
+            try:
+                # Convert None to '[]' before parsing
+                symptoms_str = patient.get('symptoms', '[]')
+                if symptoms_str is None:
+                    symptoms_str = '[]'
+                existing_symptoms = json.loads(symptoms_str)
+            except json.JSONDecodeError:
+                existing_symptoms = []
+                
+            # Checkboxes for common symptoms
+            symptom_cols = st.columns(3)
+            selected_symptoms = []
+            
+            for i, symptom in enumerate(COMMON_SYMPTOMS):
+                with symptom_cols[i % 3]:
+                    if st.checkbox(symptom, value=symptom in existing_symptoms, key=f"symptom_{symptom}"):
+                        selected_symptoms.append(symptom)
+            
+            # Custom symptom input
+            st.write("Add custom symptoms (if not listed above):")
+            custom_symptoms = st.text_area("Enter symptoms separated by commas", 
+                                        value=", ".join([s for s in existing_symptoms if s not in COMMON_SYMPTOMS]),
+                                        height=100)
+            
             # Pre-existing conditions
             st.subheader("Pre-existing Conditions")
             
@@ -307,6 +375,13 @@ with tab1:
                 else:
                     all_conditions = selected_conditions
                 
+                # Process custom symptoms
+                if custom_symptoms.strip():
+                    custom_symptom_list = [s.strip() for s in custom_symptoms.split(',') if s.strip()]
+                    all_symptoms = selected_symptoms + custom_symptom_list
+                else:
+                    all_symptoms = selected_symptoms
+                
                 # Save to database
                 updated_patient = {
                     'id': patient['id'],
@@ -314,7 +389,13 @@ with tab1:
                     'age': age,
                     'gender': gender,
                     'pre_conditions': json.dumps(all_conditions),
-                    'language': language
+                    'language': language,
+                    'temperature': temperature,
+                    'blood_pressure': blood_pressure,
+                    'heart_rate': heart_rate,
+                    'respiratory_rate': respiratory_rate,
+                    'oxygen_saturation': oxygen_saturation,
+                    'symptoms': json.dumps(all_symptoms)
                 }
                 
                 if save_patient_data(updated_patient):
