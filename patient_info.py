@@ -558,8 +558,8 @@ with tab3:
         st.session_state.last_refresh = current_time
         st.rerun()
     
-    # Filter options with "open" as the default
-    request_status = st.selectbox("Filter by Status", ["All", "open", "in_progress", "closed"], index=1)
+    # Filter options with "All" as the default (changed from index=1 to index=0)
+    request_status = st.selectbox("Filter by Status", ["All", "open", "in_progress", "closed"], index=0)
     
     # Get requests based on filter
     if request_status == "All":
