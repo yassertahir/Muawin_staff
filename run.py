@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Launcher script for Muawin Patient Information System
+Launcher script for Patient Information System
 Runs the Streamlit app on port 8502
 """
 

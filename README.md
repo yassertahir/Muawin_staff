@@ -1,4 +1,4 @@
-# Muawin Patient Information Interface
+# Patient Information Interface
 
 A simple Streamlit application for nursing staff to enter and update patient information before consultations.
 
@@ -22,7 +22,7 @@ pip install -r requirements.txt
 3. Make sure the `.env` file has the correct path to your database:
 
 ```
-DATABASE_PATH=/path/to/your/muawin.db
+DATABASE_PATH=/path/to/your/database.db
 ```
 
 ## Running the Application

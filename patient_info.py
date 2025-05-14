@@ -244,14 +244,10 @@ if 'last_refresh' not in st.session_state:
     st.session_state.refresh_interval = 30  # Refresh every 30 seconds
 
 # App title and logo
-st.set_page_config(page_title="Muawin - Patient Information", layout="wide")
+st.set_page_config(page_title="Patient Information", layout="wide")
 
-# Display logo and title side by side
-col1, col2 = st.columns([1, 5])
-with col1:
-    st.image("Muawin_logo.png", width=100)
-with col2:
-    st.title("Patient Information")
+# Display title
+st.title("Patient Information")
 
 # Create tabs for patient info, medication, and requests
 tab1, tab2, tab3 = st.tabs(["Patient Information", "Patient Medication", "Requests Monitor"])
